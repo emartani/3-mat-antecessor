@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Antecessor & Sucessor — Arrasta & Solta</title>
+  <!-- Carrega o CSS corretamente -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="topbar">
+      <h1>Antecessor & Sucessor</h1>
+      <div class="hud" aria-live="polite">
+        <span>Pontos: <strong id="score">0</strong></span>
+        <span>Streak: <strong id="streak">0</strong></span>
+        <span id="timerWrap" class="hidden">Tempo: <strong id="time">60</strong>s</span>
+      </div>
+    </header>
+
+    <section class="panel" id="settings" aria-labelledby="settings-title">
+      <h2 id="settings-title">Configurações</h2>
+      <div class="row">
+        <label for="difficulty">Dificuldade:</label>
+        <select id="difficulty">
+          <option value="easy">Fácil (0–20)</option>
+          <option value="medium" selected>Médio (0–100)</option>
+          <option value="hard">Difícil (−50–200)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="timerToggle" /> Ativar cronômetro (60s)</label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="tipsToggle" checked /> Mostrar dica ao errar</label>
+      </div>
+      <button id="startBtn" class="btn primary">Começar</button>
+    </section>
+
+    <section class="panel hidden" id="game" aria-labelledby="game-title">
+      <h2 id="game-title" class="visually-hidden">Jogo</h2>
+      <p class="subtitle">Arraste o <b>antecessor</b> e o <b>sucessor</b> para os lugares certos!</p>
+
+      <!-- Grade principal: [Antecessor] [Âncora] [Sucessor] -->
+      <div class="grid-3" role="group" aria-label="Tabuleiro de arrastar e soltar">
+        <div class="slot" id="slot-ante" data-kind="ante" tabindex="0" aria-label="Solte aqui o antecessor">
+          <div class="slot-title">Antecessor</div>
+          <div class="slot-drop">Solte aqui</div>
+        </div>
+
+        <div class="anchor-card" aria-live="polite" aria-label="Número âncora">
+          <div class="anchor-title">Número</div>
+          <div class="anchor-value" id="anchorLabel">0</div>
+        </div>
+
+        <div class="slot" id="slot-sucess" data-kind="sucess" tabindex="0" aria-label="Solte aqui o sucessor">
+          <div class="slot-title">Sucessor</div>
+          <div class="slot-drop">Solte aqui</div>
+        </div>
+      </div>
+
+      <!-- Peças arrastáveis -->
+      <div class="pieces" id="pieces" aria-label="Peças de números"></div>
+
+      <div id="feedback" class="feedback" aria-live="polite"></div>
+
+      <div class="actions">
+        <button id="nextBtn" class="btn secondary">Próximo</button>
+        <button id="endBtn" class="btn ghost">Encerrar</button>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="summary" aria-labelledby="summary-title">
+      <h2 id="summary-title">Resumo</h2>
+      <p id="summaryText"></p>
+      <button id="againBtn" class="btn primary">Jogar de novo</button>
+    </section>
+
+    <footer class="footer">
+      <small>Antecessor = −1 • Sucessor = +1</small>
+    </footer>
+  </main>
+
+  <!-- Carrega o JS corretamente -->
+  <script src="game.js"></script>
+</body>
+</html>
