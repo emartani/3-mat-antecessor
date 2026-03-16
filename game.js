@@ -1,5 +1,5 @@
 // ===== Helpers =====
-const $ = (s)=>document.querySelector(s);
+const $  = (s)=>document.querySelector(s);
 const $$ = (s)=>Array.from(document.querySelectorAll(s));
 const rnd = (min,max)=>Math.floor(Math.random()*(max-min+1))+min;
 
@@ -41,17 +41,98 @@ let state = {
 
   score:0, streak:0,
 
-  // fluxo mobile/teclado: valor da peça atualmente selecionada (ou null)
+  // peça selecionada (fluxo mobile/teclado: tocar peça -> tocar slot)
   selectedVal: null,
 };
 
+// ===== Dificuldade =====
 function applyDifficulty(v){
   if(v==="easy"){ state.min=0; state.max=20; }
   else if(v==="medium"){ state.min=0; state.max=100; }
   else { state.min=-50; state.max=200; }
 }
 
-// ===== Round =====
+// ===== Engine de DRAG (Pointer Events) =====
+const drag = {
+  el: null, val: null,
+  startX: 0, startY: 0,
+  offX: 0, offY: 0,
+  dragging: false,
+  overSlot: null,
+};
+
+function startPointerDrag(e, el, val){
+  const rect = el.getBoundingClientRect();
+  drag.el = el;
+  drag.val = val;
+  drag.startX = e.clientX;
+  drag.startY = e.clientY;
+  drag.offX = e.clientX - rect.left;
+  drag.offY = e.clientY - rect.top;
+  drag.dragging = false;
+  drag.overSlot = null;
+
+  el.classList.add("dragging");
+  el.style.width  = `${rect.width}px`;
+  el.style.height = `${rect.height}px`;
+  el.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
+
+  document.body.classList.add("dragging");
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp, { once: true });
+}
+
+function onPointerMove(e){
+  if(!drag.el) return;
+
+  const dx = e.clientX - drag.startX;
+  const dy = e.clientY - drag.startY;
+  if(!drag.dragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)){
+    drag.dragging = true;
+  }
+
+  const x = e.clientX - drag.offX;
+  const y = e.clientY - drag.offY;
+  drag.el.style.transform = `translate(${x}px, ${y}px)`;
+
+  const slot = getSlotAtPoint(e.clientX, e.clientY);
+  if(slot !== drag.overSlot){
+    if(drag.overSlot){ drag.overSlot.classList.remove("ready"); }
+    drag.overSlot = slot;
+    if(slot){ slot.classList.add("ready"); }
+  }
+}
+
+function onPointerUp(e){
+  if(drag.overSlot){ drag.overSlot.classList.remove("ready"); }
+
+  if(drag.el){
+    const slot = getSlotAtPoint(e.clientX, e.clientY);
+    if(slot){ tryPlaceValue(slot, drag.val); }
+    else { resetDraggedPiece(drag.el); }
+  }
+
+  document.body.classList.remove("dragging");
+  window.removeEventListener("pointermove", onPointerMove);
+  drag.el = null; drag.val = null; drag.dragging = false; drag.overSlot = null;
+}
+
+function getSlotAtPoint(x, y){
+  const el = document.elementFromPoint(x, y);
+  if(!el) return null;
+  const slot = el.closest?.(".slot");
+  if(slot && !slot.dataset.value){ return slot; }
+  return null;
+}
+
+function resetDraggedPiece(el){
+  el.classList.remove("dragging");
+  el.style.removeProperty("width");
+  el.style.removeProperty("height");
+  el.style.removeProperty("transform");
+}
+
+// ===== Jogo =====
 function newRound(){
   state.anchor = rnd(state.min, state.max);
   state.answerAnte = state.anchor - 1;
@@ -61,8 +142,6 @@ function newRound(){
   resetSlots();
   buildPieces();
   setFeedback("");
-
-  // Foco no primeiro slot para acessibilidade/fluxo
   els.slotAnte.focus();
 }
 
@@ -77,9 +156,9 @@ function resetSlots(){
   });
 }
 
-// Cria as peças: mantém drag&drop, mas remove “click-to-place automático”
 function buildPieces(){
   els.pieces.innerHTML = "";
+
   const corrects = [state.answerAnte, state.answerSucess];
   const used = new Set(corrects);
   const dist = [];
@@ -90,116 +169,79 @@ function buildPieces(){
   const all = [...corrects, ...dist].sort(()=>Math.random()-0.5);
 
   all.forEach(val=>{
-    const el = document.createElement("button");
+    const el = document.createElement("div");
     el.className = "piece";
     el.textContent = val;
-    el.type = "button";
-    el.setAttribute("draggable","true");
+    el.setAttribute("role","button");
     el.setAttribute("aria-label", `Número ${val}`);
 
-    // Desktop: drag & drop
-    el.addEventListener("dragstart", onDragStart);
-    // Mobile/teclado: selecionar/deselecionar peça (NÃO coloca no slot)
-    el.addEventListener("click", ()=> toggleSelect(val, el));
-    el.addEventListener("touchstart", ()=> toggleSelect(val, el), {passive:true});
+    // Drag universal
+    el.addEventListener("pointerdown", (ev)=>{
+      if(el.disabled) return;
+      ev.preventDefault();
+      startPointerDrag(ev, el, val);
+    });
+
+    // Seleção (mobile/teclado): tocar peça para selecionar; tocar slot para colocar
+    el.addEventListener("click", ()=>{
+      if(el.disabled) return;
+      toggleSelect(val, el);
+    });
 
     els.pieces.appendChild(el);
   });
+
+  // Slots: clique/toque coloca a peça selecionada (fluxo alternativo)
+  [els.slotAnte, els.slotSucess].forEach(slot=>{
+    slot.onclick = ()=>{
+      if(state.selectedVal === null) return;
+      tryPlaceValue(slot, state.selectedVal);
+    };
+  });
 }
 
-// ===== Seleção (mobile/teclado): peça selecionada e depois slot clicado =====
+// ===== Seleção (mobile/teclado) =====
 function toggleSelect(val, el){
-  // Se a peça já foi usada, ignore
-  if(el.disabled || el.getAttribute("draggable")!=="true"){ return; }
-
-  // Toggle seleção
+  if(el.disabled) return;
   if(state.selectedVal === val){
     state.selectedVal = null;
     el.classList.remove("selected");
   } else {
-    // Limpa seleção anterior
     $$(".piece.selected").forEach(p=>p.classList.remove("selected"));
     state.selectedVal = val;
     el.classList.add("selected");
   }
 }
 
-// Slots: aceitam drop e também clique/toque para colocar A PEÇA SELECIONADA
-[els.slotAnte, els.slotSucess].forEach(slot=>{
-  // Drag & drop (desktop)
-  slot.addEventListener("dragover", (e)=>{ e.preventDefault(); slot.classList.add("ready"); });
-  slot.addEventListener("dragleave", ()=> slot.classList.remove("ready"));
-  slot.addEventListener("drop", (e)=>{
-    e.preventDefault();
-    slot.classList.remove("ready");
-    const data = Number(e.dataTransfer.getData("text/plain"));
-    tryPlaceValue(slot, data);
-  });
-
-  // Clique/toque (mobile/teclado): coloca a peça SE houver uma selecionada
-  slot.addEventListener("click", ()=>{
-    if(state.selectedVal === null) return;
-    tryPlaceValue(slot, state.selectedVal);
-  });
-  slot.addEventListener("touchstart", ()=>{
-    if(state.selectedVal === null) return;
-    tryPlaceValue(slot, state.selectedVal);
-  }, {passive:true});
-
-  // Teclado: Enter/Space coloca a peça selecionada
-  slot.addEventListener("keydown", (e)=>{
-    if(e.key==="Enter" || e.key===" "){
-      e.preventDefault();
-      if(state.selectedVal !== null){
-        tryPlaceValue(slot, state.selectedVal);
-      }
-    }
-  });
-});
-
-// ===== Drag & Drop (desktop) =====
-let dragValue = null;
-function onDragStart(e){
-  dragValue = Number(e.target.textContent);
-  e.dataTransfer.setData("text/plain", String(dragValue));
-}
-document.addEventListener("dragend", ()=> dragValue=null);
-
+// ===== Lógica de encaixe =====
 function tryPlaceValue(slot, val){
-  // Slot já preenchido? não substitui
   if(slot.dataset.value){
     setFeedback("Este espaço já foi preenchido. Use o outro ou avance.", "hint");
+    const p = findPiece(val);
+    if(p) resetDraggedPiece(p);
     return;
   }
 
   const kind = slot.dataset.kind; // "ante" | "sucess"
   const correct = (kind === "ante" ? state.answerAnte : state.answerSucess);
-  const piece = findDraggablePiece(val);
+  const piece = findPiece(val);
   if(!piece){ 
-    // Pode ocorrer se a peça já foi usada ou se tocou no vazio
-    setFeedback("Selecione uma peça válida primeiro.", "hint");
+    setFeedback("Selecione uma peça válida.", "hint");
     return; 
   }
 
-  // Encaixa no slot
   slot.classList.add("filled");
   slot.dataset.value = String(val);
   slot.querySelector(".slot-drop").textContent = val;
 
-  // Marca peça como usada
   piece.classList.add(val===correct ? "correct":"wrong");
-  piece.setAttribute("draggable","false");
   piece.disabled = true;
   piece.style.cursor = "not-allowed";
   piece.classList.remove("selected");
+  resetDraggedPiece(piece);
 
-  // Limpa seleção se esta peça estava selecionada
-  if(state.selectedVal === val){ state.selectedVal = null; }
-
-  // Atualiza estado dos slots
   if(kind==="ante"){ state.filledAnte = val; } else { state.filledSucess = val; }
 
-  // Pontuação/feedback
   const ok = (val===correct);
   addScore(ok);
   if(ok){ setFeedback("Boa! ✔️", "good"); }
@@ -208,14 +250,13 @@ function tryPlaceValue(slot, val){
     if(state.showTips) setFeedback(explain(kind), "hint", true);
   }
 
-  // Validar rodada quando ambos preenchidos
   if(state.filledAnte!==null && state.filledSucess!==null){
     finalizeRound();
   }
 }
 
-function findDraggablePiece(val){
-  return $$(".piece").find(p => Number(p.textContent)===val && p.getAttribute("draggable")==="true" && !p.disabled);
+function findPiece(val){
+  return $$(".piece").find(p => Number(p.textContent)===val && !p.disabled);
 }
 
 function explain(kind){
@@ -297,3 +338,4 @@ els.startBtn.addEventListener("click", startGame);
 els.againBtn.addEventListener("click", backToSettings);
 els.endBtn.addEventListener("click", ()=> endGame(false));
 els.nextBtn.addEventListener("click", newRound);
+``
