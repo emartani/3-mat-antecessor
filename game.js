@@ -45,6 +45,27 @@ let state = {
   selectedVal: null,
 };
 
+function checkOrientation(){
+  const overlay = document.getElementById("rotateOverlay");
+
+  // iPhone/iPad Safari às vezes não atualiza orientationchange corretamente,
+  // então reforçamos por width > height
+  const isPortrait = window.innerHeight > window.innerWidth;
+
+  if(isPortrait){
+    overlay.style.display = "flex";
+  } else {
+    overlay.style.display = "none";
+  }
+}
+
+// Detecta alteração de orientação
+window.addEventListener("orientationchange", checkOrientation);
+window.addEventListener("resize", checkOrientation);
+
+// Checa na abertura
+checkOrientation();
+
 // ===== Dificuldade =====
 function applyDifficulty(v){
   if(v==="easy"){ state.min=0; state.max=20; }

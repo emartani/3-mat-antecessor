@@ -249,3 +249,38 @@ body.dragging{
   font-size:12px;
   color:#35506e;
 }
+/* ===== BLOQUEIO DE ORIENTAÇÃO (portrait) ===== */
+#rotateOverlay {
+  position: fixed;
+  inset: 0;
+  background: #000000cc;
+  backdrop-filter: blur(6px);
+  color: white;
+  font-weight: 900;
+  display: none;            /* será ativado via JS */
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  z-index: 99999;
+}
+
+.rotateBox {
+  background: #ffffff22;
+  border-radius: 20px;
+  padding: 25px 30px;
+  font-size: 26px;
+  text-shadow: 0 2px 4px #000;
+}
+
+/* MOSTRAR O BLOQUEIO quando estiver em modo retrato */
+@media screen and (orientation: portrait) {
+  #rotateOverlay {
+    display: flex;
+  }
+}
+
+@media screen and (orientation: landscape) {
+  #rotateOverlay {
+    display: none;
+  }
+}
